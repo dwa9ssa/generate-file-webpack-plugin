@@ -33,8 +33,16 @@ class GenerateFileWebpackPlugin {
                         if (! fs.existsSync(targetDir)) {
                             fs.mkdirSync(targetDir, {recursive: true});
                         }
-                        fs.writeFileSync(targetFile, content);
-                        this.info(compilation, '[generated]', targetFile);
+                        
+                        var alreadyGenerated = fs.readFileSync(targetFile);
+                        if (alreadyGenerated.toString() !== content) {
+                            console.log("generated");
+                            fs.writeFileSync(targetFile, content);
+                            this.info(compilation, '[generated]', targetFile);
+                        } else {
+                            console.log("same content");
+                            this.info(compilation, '[same content]', targetFile);
+                        }
                         callback();
                     })
                     .catch(e => {
