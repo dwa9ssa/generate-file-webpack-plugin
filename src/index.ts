@@ -6,14 +6,14 @@ import Compilation = webpack.compilation.Compilation;
 
 export = generate;
 
-function generate(options: Options) {
-    return new GenerateFileWebpackPlugin(options);
+function generate(options: Option[], debug?: boolean) {
+    return new GenerateFileWebpackPlugin(options, debug);
 }
 
 class GenerateFileWebpackPlugin {
     private readonly name: string;
 
-    public constructor(public options: Options) {
+    public constructor(public options: Option[], debug?: boolean) {
         this.name = 'GenerateFileWebpackPlugin';
         this.debug(null, '[created]');
     }
@@ -21,44 +21,48 @@ class GenerateFileWebpackPlugin {
     // noinspection JSUnusedGlobalSymbols
     public apply(compiler: webpack.Compiler):void {
         this.debug(null, '[called]');
-        compiler.hooks.emit.tapAsync(this.name, (compilation, callback) => {
-            this.debug(compilation, '[emit.tapAsync]');
-            try {
-                const targetFile = this.inferTargetFile(compilation);
 
-                this.debug(compilation, '[generating]', targetFile);
-                this.resolveContent()
-                    .then(content => {
-                        const targetDir = path.dirname(targetFile);
-                        if (! fs.existsSync(targetDir)) {
-                            fs.mkdirSync(targetDir, {recursive: true});
-                        }
-                        
-                        var alreadyGenerated = fs.readFileSync(targetFile);
-                        if (alreadyGenerated.toString() !== content) {
-                            console.log("generated");
-                            fs.writeFileSync(targetFile, content);
-                            this.info(compilation, '[generated]', targetFile);
-                        } else {
-                            console.log("same content");
-                            this.info(compilation, '[same content]', targetFile);
-                        }
-                        callback();
-                    })
-                    .catch(e => {
-                        this.fail(compilation, e, targetFile);
-                        callback();
-                    });
-            } catch (e) {
-                this.fail(compilation, e);
-                callback();
-            }
+        this.options.forEach(option => {
+            compiler.hooks.emit.tapAsync(this.name, (compilation, callback) => {
+                this.debug(compilation, '[emit.tapAsync]');
+                try {
+                    const targetFile = this.inferTargetFile(compilation, option.file);
+    
+                    this.debug(compilation, '[generating]', targetFile);
+                    this.resolveContent(option.content)
+                        .then(content => {
+                            const targetDir = path.dirname(targetFile);
+                            if (! fs.existsSync(targetDir)) {
+                                fs.mkdirSync(targetDir, {recursive: true});
+                            }
+                            
+                            var alreadyGenerated = fs.readFileSync(targetFile);
+                            if (alreadyGenerated.toString() !== content) {
+                                console.log("generated");
+                                fs.writeFileSync(targetFile, content);
+                                this.info(compilation, '[generated]', targetFile);
+                            } else {
+                                console.log("same content");
+                                this.info(compilation, '[same content]', targetFile);
+                            }
+                            callback();
+                        })
+                        .catch(e => {
+                            this.fail(compilation, e, targetFile);
+                            callback();
+                        });
+                } catch (e) {
+                    this.fail(compilation, e);
+                    callback();
+                }
+            });
         });
+
     }
 
-    private inferTargetFile(compilation: Compilation): string {
-        if (path.isAbsolute(this.options.file)) {
-            return this.options.file;
+    private inferTargetFile(compilation: Compilation, file: string): string {
+        if (path.isAbsolute(file)) {
+            return file;
         }
 
         if (! compilation.compiler.outputPath) {
@@ -71,11 +75,11 @@ class GenerateFileWebpackPlugin {
             throw new Error('Could not infer target file path: Configured webpack output path is not an absolute path.');
         }
 
-        return path.resolve(outputPath, this.options.file);
+        return path.resolve(outputPath, file);
     }
 
-    private async resolveContent(): Promise<string> {
-        const contentSource = this.options.content;
+    private async resolveContent(content: any): Promise<string> {
+        const contentSource = content;
         if (isString(contentSource)) {
             return contentSource as string;
         } else if (isBuffer(contentSource)) {
@@ -106,7 +110,7 @@ class GenerateFileWebpackPlugin {
     }
 
     private debug(compilation: Compilation|null, logMessage: string, targetFile?: string) {
-        if (! this.options.debug) {
+        if (! this.debug) {
             return;
         }
         this.getLogger(compilation).info(this.message(logMessage, targetFile));
@@ -155,8 +159,7 @@ function typeNameOf(value: any): string {
     }
 }
 
-interface Options {
+interface Option {
     file: string;
     content: any;
-    debug?: boolean
 }
