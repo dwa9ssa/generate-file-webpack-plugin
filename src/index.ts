@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import Compilation = webpack.compilation.Compilation;
 
+import * as Handlebars from "handlebars";
+
 export = generate;
 
 function generate(options: Option[], debug?: boolean) {
@@ -22,6 +24,11 @@ class GenerateFileWebpackPlugin {
     public apply(compiler: webpack.Compiler):void {
         this.debug(null, '[called]');
 
+        Handlebars.registerHelper("capitalize", function(value){
+            return value.charAt(0).toUpperCase() + value.slice(1);
+        })
+        
+
         this.options.forEach(option => {
             compiler.hooks.emit.tapAsync(this.name, (compilation, callback) => {
                 this.debug(compilation, '[emit.tapAsync]');
@@ -29,7 +36,7 @@ class GenerateFileWebpackPlugin {
                     const targetFile = this.inferTargetFile(compilation, option.file);
     
                     this.debug(compilation, '[generating]', targetFile);
-                    this.resolveContent(option.content)
+                    this.resolveContent(option.content, option.templateData)
                         .then(content => {
                             const targetDir = path.dirname(targetFile);
                             if (! fs.existsSync(targetDir)) {
@@ -78,9 +85,12 @@ class GenerateFileWebpackPlugin {
         return path.resolve(outputPath, file);
     }
 
-    private async resolveContent(content: any): Promise<string> {
+    private async resolveContent(content: any, templateData: any): Promise<string> {
         const contentSource = content;
-        if (isString(contentSource)) {
+        debugger;
+        if (isTemplate(contentSource)) {
+            return geContentFromTemplate(contentSource, templateData) as string;
+        } else if (isString(contentSource)) {
             return contentSource as string;
         } else if (isBuffer(contentSource)) {
             return contentSource.toString();
@@ -135,6 +145,18 @@ class GenerateFileWebpackPlugin {
     }
 }
 
+function isTemplate(value: any): boolean {
+    return typeof value === 'string' || value instanceof String && value.startsWith("TEMPLATE:");
+}
+
+function template(file: any) {
+    return Handlebars.compile(fs.readFileSync(file.replace("TEMPLATE:", "")).toString());
+};
+
+function geContentFromTemplate(value: any, templateData: any): String {
+    return template(value)(templateData);
+}
+
 function isString(value: any): boolean {
     return typeof value === 'string' || value instanceof String;
 }
@@ -162,4 +184,5 @@ function typeNameOf(value: any): string {
 interface Option {
     file: string;
     content: any;
+    templateData: any;
 }
